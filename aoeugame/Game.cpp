@@ -1,17 +1,25 @@
 #include <iostream>
 #include <string>
-#include "Errors.h"
+#include "MKT2D/Errors.h"
+#include "MKT2D/MKT2D.h"
 #include "Game.h"
 
 
-Game::Game() : _window(nullptr), _screenWidth(1024), _screenHeight(720),
-               _gameState(GameState::PLAY), _tick(0) {
+Game::Game() : _screenWidth(1024),
+	           _screenHeight(720),
+               _gameState(GameState::PLAY),
+               _frameCount(1),
+               NUM_SAMPLES(60),
+               _prevTicks(0),
+			   _maxFPS(60.0f) {
+	_frameTimes = new float[NUM_SAMPLES];
+	_ticksPerFrame = 1000.0f / _maxFPS;
 }
 
 Game::~Game() {
 }
 
-void Game::initShader(GLSLProgram& program, std::string vertFilepath, std::string fragFilepath,
+void Game::initShader(MKT2D::GLSLProgram& program, std::string vertFilepath, std::string fragFilepath,
 					  int attributeCount, std::string attributes[]) {
 	program.complieShaders(vertFilepath, fragFilepath);
 	for (int att = 0; att < attributeCount; att++) {
@@ -21,34 +29,18 @@ void Game::initShader(GLSLProgram& program, std::string vertFilepath, std::strin
 }
 
 void Game::initShaders() {
-	std::string attributes[] = { "vertexPosition", "vertexColour" };
+	int attributeCount = 3;
+	std::string attributes[] = { "vertexPosition", "vertexColour", "vertexUV" };
 	initShader(_colorProgram, "Shaders/colorShading.vert",
-			   "Shaders/colorShading.frag", 2, attributes);
+			   "Shaders/colorShading.frag", attributeCount, attributes);
 }
 
 void Game::initSys() {
-	SDL_Init(SDL_INIT_EVERYTHING);
+	MKT2D::init();
 
-	_window = SDL_CreateWindow("aoeuGame", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-							   _screenWidth, _screenHeight, SDL_WINDOW_OPENGL);
-	if (!_window) {
-		fatalError("SDL window could not be created");
-	}
-
-	SDL_GLContext glContext = SDL_GL_CreateContext(_window);
-	if (!glContext) {
-		fatalError("SDL_GL context could not be created");
-	}
-
-	GLenum error = glewInit();
-	if (error != GLEW_OK) {
-		fatalError("Could not initialize glew");
-	}
+	_window.create("aoeugame", _screenWidth, _screenHeight, MKT2D::WN_BORDERLESS);
 
 	initShaders();
-
-	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-	glClearColor(1.0f, 0, 1.0f, 1.0f);
 }
 
 void Game::processInput() {
@@ -73,28 +65,71 @@ void Game::drawGame() {
 
 
 	_colorProgram.use();
-	GLuint timeLocation = _colorProgram.getUniformLocation("time");
-	glUniform1f(timeLocation, _tick);
+	glActiveTexture(GL_TEXTURE0);
 
-	_sprite.draw();
+	GLint timeLocation = _colorProgram.getUniformLocation("time");
+	glUniform1f(timeLocation, _frameCount);
+	GLint textureLocation = _colorProgram.getUniformLocation("samplerTexture");
+	glUniform1f(textureLocation, 0);
+
+	for (int sprite = 0; sprite < _sprites.size(); sprite++) {
+		_sprites[sprite]->draw();
+	}
 
 	_colorProgram.unuse();
 
+	_window.swapBuffer();
+}
 
-	SDL_GL_SwapWindow(_window);
+void Game::calculateFPS() {
+	float currentTicks = SDL_GetTicks();
+
+	_frameTime = currentTicks - _prevTicks;
+	_frameTimes[_frameCount % NUM_SAMPLES] = _frameTime;
+
+	_prevTicks = currentTicks;
+
+	int count;
+
+	if (_frameCount < NUM_SAMPLES) {
+		count = _frameCount;
+	} else {
+		count = NUM_SAMPLES;
+	}
+
+	float frameTimeAverage = 0;
+	for (int t = 0; t < count; t++) {
+		frameTimeAverage += _frameTimes[t];
+	}
+	frameTimeAverage /= count;
+
+	_FPS = frameTimeAverage ? 1000.0f / frameTimeAverage : 60.0f;
 }
 
 void Game::gameLoop() {
 	while (_gameState != GameState::EXIT) {
+		float startTicks = SDL_GetTicks();
 		processInput();
 		drawGame();
-		_tick += 0.01f;
+
+		//calculateFPS();
+		//std::cout << _fps << std::endl;
+		_frameCount++;
+
+		float frameTicks = SDL_GetTicks() - startTicks;
+		if (frameTicks < _ticksPerFrame) {
+			SDL_Delay(_ticksPerFrame - frameTicks);
+		}
 	}
 }
 
 void Game::run() {
 	initSys();
-	_sprite.init(-1, -1, 2, 2);
+
+	_sprites.push_back(&MKT2D::Sprite());
+	_sprites.back()->init(-1, -1, 1, 1, "res/sprite_0000.png");
+	_sprites.push_back(&MKT2D::Sprite());
+	_sprites.back()->init(-1, 0, 1, 1, "res/sprite_0000.png");
 
 	gameLoop();
 }

@@ -1,9 +1,12 @@
 #pragma once
 
+
+#include <MKT2D/GLSLProgram.h>
+#include <MKT2D/Sprite.h>
+#include <MKT2D/Window.h>
 #include <SDL/SDL.h>
 #include <GL/glew.h>
-#include "GLSLProgram.h"
-#include "Sprite.h"
+#include <vector>
 
 enum class GameState {
 	PLAY,
@@ -19,22 +22,31 @@ public:
 	void run();
 
 private:
-	void initShader(GLSLProgram& program, std::string vertFilepath, std::string fragFilepath,
+	void initShader(MKT2D::GLSLProgram& program, std::string vertFilepath, std::string fragFilepath,
 					int attributeCount, std::string attributes[]);
 	void initShaders();
 	void initSys();
 
 	void processInput();
 	void drawGame();
+	void calculateFPS();
 	void gameLoop();
 
-	SDL_Window *_window;
+	MKT2D::Window _window;
 	int _screenWidth;
 	int _screenHeight;
 
 	GameState _gameState;
-	float _tick;
-	Sprite _sprite;
-	GLSLProgram _colorProgram;
+	std::vector<MKT2D::Sprite*> _sprites;
+	MKT2D::GLSLProgram _colorProgram;
+
+	float _maxFPS;
+	float _ticksPerFrame;
+	float _FPS;
+	int _frameCount;
+	float _frameTime;
+	int NUM_SAMPLES;
+	float * _frameTimes;
+	float _prevTicks;
 };
 
